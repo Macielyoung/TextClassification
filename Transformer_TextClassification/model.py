@@ -1,21 +1,31 @@
 # coding:utf-8
 
 import torch
-import torch.nn as nn
+from torch import nn
 from copy import deepcopy
-from train_utils import Embeddings, PositionalEncoding
+from utils import Embedding, PositionalEncoding
 from attention import MultiHeadedAttention
 from encoder import EncoderLayer, Encoder
 from ffn import PositionwiseFeedForward
 import numpy as np
-from utils import *
+from sklearn.metrics import accuracy_score
 
-def evaluate_model(model, iterator):
+def evaluate_model(model, sen_batches, ac_batches):
     all_preds, all_y = [], []
-    for ids, batch in enumerate(iterator)
+    for ids, sen_batch in enumerate(sen_batches):
+        if torch.cuda.is_available():
+            x = torch.Tensor(sen_batch).cuda()
+        else:
+            x = torch.Tensor(sen_batch)
+        y_pred = model(x)
+        predicted = torch.max(y_pred.cpu().data, 1)[1] + 1
+        all_preds.extend(predicted.numpy())
+        all_y += ac_batches[ids]
+    score = accuracy_score(all_y, np.array(all_preds).flatten())
+    return score
 
 # transformer model
-class Transformer(nn.Nodule):
+class Transformer(nn.Module):
     def __init__(self, config, src_vocab):
         super(Transformer, self).__init__()
         self.config = config
@@ -35,13 +45,13 @@ class Transformer(nn.Nodule):
         position = PositionalEncoding(d_model, dropout)
 
         self.encoder = Encoder(EncoderLayer(config.d_model, deepcopy(attn), deepcopy(ff), dropout), N)
-        self.src_embed = nn.Sequential(Embeddings(self.config.d_model, self.src_vocab), deepcopy(position)) # embedding with position encoding
+        self.src_embed = nn.Sequential(Embedding(self.config.d_model, self.src_vocab), deepcopy(position)) # embedding with position encoding
 
         self.fc = nn.Linear(self.config.d_model, self.config.output_size)
         self.softmax = nn.Softmax()
 
     def forward(self, x):
-        embedded_sentences = self.src_embed(x.permute(1, 0)) # shape = (batch_size, sen_len, d_model)
+        embedded_sentences = self.src_embed(x) # shape = (batch_size, sen_len, d_model)
         encoded_sentences = self.encoder(embedded_sentences)
 
         # Convert input to (batch_size, d_model) for linear layer
@@ -60,23 +70,23 @@ class Transformer(nn.Nodule):
         for g in self.optimizer.param_groups:
             g['lr'] = g['lr'] / 2
 
-    def run_epoch(self, train_iterator, val_iterator, epoch):
+    def run_epoch(self, sentence_batches, action_batches, epoch):
         train_losses = []
-        val_accuracies = []
         losses = []
 
         # Reduce learning rate as number of epochs increase
         if (epoch == int(self.config.max_epochs/3)) or (epoch == int(2*self.config.max_epochs/3)):
             self.reduce_lr()
         
-        for i, batch in enumerate(train_iterator):
+        batches_num = range(len(sentence_batches))
+        for sentence_batch, action_batch, i in zip(sentence_batches, action_batches, batches_num):
             self.optimizer.zero_grad()
             if torch.cuda.is_available():
-                x = batch.text.cuda()
-                y = (batch.label - 1).type(torch.cuda.LongTensor)
+                x = torch.LongTensor(sentence_batch).cuda()
+                y = torch.LongTensor(action_batch).cuda()
             else:
-                x = batch.text
-                y = (batch.label - 1).type(torch.LongTensor)
+                x = torch.LongTensor(sentence_batch)
+                y = torch.LongTensor(action_batch)
             y_pred = self.__call__(x)
             loss = self.loss_op(y_pred, y)
             loss.backward()
@@ -90,9 +100,8 @@ class Transformer(nn.Nodule):
                 print("\tAverage training loss: {:.5f}".format(avg_train_loss))
                 losses = []
 
-                # Evalute Accuracy on validation set
-                val_accuracy = evaluate_model(self, val_iterator)
-                print("\tVal Accuracy: {:.4f}".format(val_accuracy))
-                self.train()
-                
-        return train_losses, val_accuracies
+                # # Evalute Accuracy on validation set
+                # val_accuracy = evaluate_model(self, val_iterator)
+                # print("\tVal Accuracy: {:.4f}".format(val_accuracy))
+                # self.train()
+        return train_losses

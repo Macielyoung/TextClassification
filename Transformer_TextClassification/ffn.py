@@ -1,7 +1,8 @@
 # coding:utf-8
 
 import torch
-from torch.nn.functional as F
+from torch import nn
+import torch.nn.functional as F
 
 class PositionwiseFeedForward(nn.Module):
     # "Positionwise feed-forward网络全连接层"

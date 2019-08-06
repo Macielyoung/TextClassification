@@ -1,7 +1,7 @@
 # coding:utf-8
 
 from torch import nn
-from embedding import clones
+from utils import clones
 from sublayer import LayerNorm, SublayerOutput
 
 class Encoder(nn.Module):

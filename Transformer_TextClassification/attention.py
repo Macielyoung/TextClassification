@@ -4,7 +4,7 @@ import torch
 from torch import nn
 import math
 import torch.nn.functional as F
-from embedding import clones
+from utils import clones
 
 def attention(qurey, key, value, mask=None, dropout=None):
     # "点乘注意力机制实现"
